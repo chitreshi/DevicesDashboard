@@ -2,74 +2,91 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import json
 
+df = pd.read_csv("finalDevicescsv.csv")
 
-with open("tested_Device.json", "r") as f:
-    data = json.load(f)
+df['timestamp'] = pd.to_datetime(df['date'] + ' ' + df['time'])
+df['date_only'] = pd.to_datetime(df['date']).dt.date
+df['hour'] = pd.to_datetime(df['time']).dt.hour
+df['device_count'] = 1 
 
+st.title("📊 Device Testing Analysis Dashboard")
 
-records = []
-for item in data:
-    doc = item["_doc"]
-    created_at = doc.get("createdAt")
-    
-    
-    for test in doc.get("testing_history", []):
-        records.append({
-            "deviceId": doc.get("deviceId"),
-            "tester": test.get("tester"),
-            "test_type": test.get("type"),
-            "createdAt": created_at
-        })
+testing_types = df['testingType'].unique().tolist()
+selected_type = st.sidebar.selectbox("Select Testing Type", testing_types)
 
-df = pd.DataFrame(records)
+df = df[df['testingType'] == selected_type]
 
-df["createdAt"] = pd.to_datetime(df["createdAt"])
-df["hour"] = df["createdAt"].dt.hour
-df["day"] = df["createdAt"].dt.date
+st.sidebar.header("Date Range Filters")
+start_date = st.sidebar.date_input("Start Date", df['date_only'].min())
+end_date = st.sidebar.date_input("End Date", df['date_only'].max())
 
-test_type_map = {1: "Basic", 2: "Hardware", 3: "Online/Offline"}
-df["test_category"] = df["test_type"].map(test_type_map)
+df_range = df[(df['date_only'] >= start_date) & (df['date_only'] <= end_date)]
 
-st.sidebar.header("Filter by Date")
-unique_dates = sorted(df["day"].unique())
-selected_date = st.sidebar.date_input("Select a date", value=unique_dates[0], min_value=min(unique_dates), max_value=max(unique_dates)) 
-daily_df = df[df["day"] == pd.to_datetime(selected_date).date()]
+hourly_range = df_range.groupby(['date_only', 'hour', 'userName'])['device_count'].sum().reset_index()
+avg_hourly_range = (
+    hourly_range
+    .groupby(['date_only', 'userName'])['device_count']
+    .mean()
+    .reset_index()
+    .rename(columns={'device_count': 'Avg Devices per Hour', 'date_only': 'Date'})
+)
 
-st.sidebar.header("Filter by Tester")
-unique_testers = sorted(df["tester"].dropna().unique())
-selected_tester = st.sidebar.selectbox("Select a Tester", options=["All"] + unique_testers)
+fig_stacked = px.bar(
+    avg_hourly_range,
+    x='Date',
+    y='Avg Devices per Hour',
+    color='userName',
+    barmode='stack',
+    title='Stacked Avg Devices per Hour by User',
+    labels={'userName': 'User'}
+)
+st.plotly_chart(fig_stacked, use_container_width=True)
 
-daily_df = df[df["day"] == pd.to_datetime(selected_date).date()]
+fig_grouped = px.bar(
+    avg_hourly_range,
+    x='Date',
+    y='Avg Devices per Hour',
+    color='userName',
+    barmode='group',
+    title='Grouped Avg Devices per Hour by User',
+    labels={'userName': 'User'}
+)
+st.plotly_chart(fig_grouped, use_container_width=True)
 
-if selected_tester != "All":
-    daily_df = daily_df[daily_df["tester"] == selected_tester]
+st.header("Specific Date View")
+st.sidebar.header("Specific Date Filter")
+available_dates = sorted(df_range['date_only'].unique())
+selected_date = st.sidebar.selectbox("Select a Specific Date", available_dates)
 
+df_selected = df_range[df_range['date_only'] == selected_date]
+hourly_selected = (
+    df_selected.groupby(['hour', 'userName'])['device_count']
+    .sum()
+    .reset_index()
+    .rename(columns={'device_count': 'Devices Tested'})
+)
 
+avg_selected = (
+    df_selected.groupby(['hour', 'userName'])['device_count']
+    .sum()
+    .groupby(['userName'])
+    .mean()
+    .reset_index()
+    .rename(columns={'device_count': 'Avg Devices per Hour'})
+)
 
-ddaily_df = df[df["day"] == pd.to_datetime(selected_date).date()]
-if selected_tester != "All":
-    daily_df = daily_df[daily_df["tester"] == selected_tester]
+st.subheader(f"📊 Bar Chart for {selected_date}")
+fig_date = px.bar(
+    avg_selected,
+    x='userName',
+    y='Avg Devices per Hour',
+    color='userName',
+    title=f'Avg Devices per Hour by User on {selected_date}',
+    labels={'userName': 'User'}
+)
+st.plotly_chart(fig_date, use_container_width=True)
 
-hourly_counts = daily_df.groupby(["hour", "test_category"]).size().reset_index(name="count")
-fig_hourly = px.bar(hourly_counts, x="hour", y="count", color="test_category", barmode="group",
-                    title=f"Devices Tested Hourly on {selected_date}", labels={"count": "Devices Tested"})
-
-daywise_counts = df.groupby(["day", "test_category"]).size().reset_index(name="count")
-fig_daywise = px.line(daywise_counts, x="day", y="count", color="test_category",
-                      title="Day-wise Devices Tested", markers=True)
-
-st.title("Device Testing Dashboard")
-st.plotly_chart(fig_hourly, use_container_width=True)
-st.plotly_chart(fig_daywise, use_container_width=True)
-
-st.subheader("User-wise Device Count per Hour")
-user_hourly_counts = daily_df.groupby(["tester", "hour", "test_category"]).size().reset_index(name="count")
-st.dataframe(user_hourly_counts.sort_values(by=["tester", "hour"]), use_container_width=True)
-
-fig_user_hour = px.bar(user_hourly_counts, x="hour", y="count", color="test_category",
-                       facet_col="tester", facet_col_wrap=3,
-                       title="Hourly Devices Tested by Each User",
-                       labels={"count": "Devices Tested"})
-st.plotly_chart(fig_user_hour, use_container_width=True)
+st.subheader(f"📋 Devices Tested per Hour by User on {selected_date}")
+table_pivot = hourly_selected.pivot(index='hour', columns='userName', values='Devices Tested').fillna(0).astype(int)
+st.dataframe(table_pivot)

@@ -26,6 +26,7 @@ if st.sidebar.button("🔍 Get Data"):
         "startDate": str(start_date),
         "endDate": str(end_date),
         "testingType": api_testing_type
+        
     }
 
     url = "https://int.alistetechnologies.com/testing/passedSummary"

@@ -16,7 +16,6 @@ testing_type_map = {
     'Online/Offline Testing': 3
 }
 
-# === SIDEBAR FILTERS ===
 st.sidebar.header("Filters")
 
 analysis_type = st.sidebar.selectbox("Select Analysis Type", ["Testing Analysis", "Device Programming Analysis"])
@@ -25,19 +24,22 @@ if analysis_type == "Testing Analysis":
     selected_type = st.sidebar.selectbox("Select Testing Type", list(testing_type_map.keys()))
     api_testing_type = testing_type_map[selected_type]
 else:
-    api_testing_type = None  # Not used in device programming
+    api_testing_type = None  
 
-start_date = st.sidebar.date_input("Start Date", date(2025, 1, 1))
+from datetime import date, datetime
+
+today = date.today()
+first_of_month = date(today.year, today.month, 1)
+start_date = st.sidebar.date_input("Start Date", first_of_month)
+
 end_date = st.sidebar.date_input("End Date", date.today())
 
 fetch_data = st.sidebar.button("🔍 Fetch Data")
 
-# === MAIN TITLE ===
 st.title("📊 Testing and Devices Data Dashboard")
 
 if fetch_data:
 
-    # === TESTING ANALYSIS ===
     if analysis_type == "Testing Analysis":
         st.header("🧪 Testing Analysis")
 
@@ -159,7 +161,6 @@ if fetch_data:
         else:
             st.error(f"Testing API request failed with status code {response_testing.status_code}")
 
-    # === DEVICE PROGRAMMING ANALYSIS ===
     elif analysis_type == "Device Programming Analysis":
         st.header("🔧 Device Programming Analysis")
 
@@ -186,7 +187,6 @@ if fetch_data:
                     st.subheader("📄 Retrieved Assigned Devices Data")
                     st.dataframe(df_assign.head())
 
-                    # === TOTAL DEVICES PER DAY BY DEVICE CODE ===
                     total_per_day_code = df_assign.groupby(['date', 'deviceCode'])['device_count'].sum().reset_index()
                     st.subheader("📊 Total Devices Programmed Per Day by Device Code")
                     fig_total_per_day = px.bar(
@@ -197,7 +197,6 @@ if fetch_data:
                     )
                     st.plotly_chart(fig_total_per_day, use_container_width=True)
 
-                    # === AVERAGE PER DAY BY DEVICE CODE ===
                     hourly_code_data = df_assign.groupby(['date', 'hour', 'deviceCode'])['device_count'].sum().reset_index()
                     avg_per_day_code = (
                         hourly_code_data.groupby(['date', 'deviceCode'])['device_count']
